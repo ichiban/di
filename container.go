@@ -9,14 +9,14 @@ import (
 )
 
 type Container struct {
-	providers map[string]interface{}
-	instances map[string]interface{}
+	providers map[reflect.Type]interface{}
+	instances map[reflect.Type]interface{}
 }
 
 func New(providers ...interface{}) (*Container, error) {
 	c := Container{
-		providers: make(map[string]interface{}, len(providers)),
-		instances: make(map[string]interface{}, len(providers)),
+		providers: make(map[reflect.Type]interface{}, len(providers)),
+		instances: make(map[reflect.Type]interface{}, len(providers)),
 	}
 
 	for _, p := range providers {
@@ -49,7 +49,7 @@ func (c *Container) provide(f interface{}) error {
 	}
 
 	o := t.Out(0)
-	c.providers[o.String()] = f
+	c.providers[o] = f
 
 	return nil
 }
@@ -67,7 +67,7 @@ func (c *Container) Inject(o interface{}) error {
 func (c *Container) inject(v reflect.Value) error {
 	t := v.Type()
 
-	o, err := c.instance(t.String())
+	o, err := c.instance(t)
 	if err != nil {
 		return err
 	}
@@ -81,15 +81,15 @@ func (c *Container) inject(v reflect.Value) error {
 	return nil
 }
 
-func (c *Container) instance(name string) (interface{}, error) {
-	i, ok := c.instances[name]
+func (c *Container) instance(ty reflect.Type) (interface{}, error) {
+	i, ok := c.instances[ty]
 	if ok {
 		return i, nil
 	}
 
-	p, ok := c.providers[name]
+	p, ok := c.providers[ty]
 	if !ok {
-		return nil, fmt.Errorf("not provided: %s", name)
+		return nil, fmt.Errorf("not provided: %s", ty)
 	}
 
 	f := reflect.ValueOf(p)
@@ -97,7 +97,7 @@ func (c *Container) instance(name string) (interface{}, error) {
 
 	args := make([]reflect.Value, t.NumIn())
 	for i := 0; i < t.NumIn(); i++ {
-		a, err := c.instance(t.In(i).String())
+		a, err := c.instance(t.In(i))
 		if err != nil {
 			return nil, err
 		}
@@ -117,10 +117,10 @@ func (c *Container) instance(name string) (interface{}, error) {
 			e = i.(error)
 		}
 	default:
-		e = fmt.Errorf("invalid provider: %s", name)
+		e = fmt.Errorf("invalid provider: %s", ty)
 	}
 
-	c.instances[name] = o
+	c.instances[ty] = o
 
 	return o, e
 }

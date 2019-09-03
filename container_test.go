@@ -2,6 +2,7 @@ package di
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,7 +80,7 @@ func TestContainer_Inject(t *testing.T) {
 		assert := assert.New(t)
 
 		c := Container{
-			providers: map[string]interface{}{},
+			providers: map[reflect.Type]interface{}{},
 		}
 
 		var f *foo
@@ -90,16 +91,16 @@ func TestContainer_Inject(t *testing.T) {
 		assert := assert.New(t)
 
 		c := Container{
-			providers: map[string]interface{}{
-				"*di.foo": newFoo,
+			providers: map[reflect.Type]interface{}{
+				reflect.TypeOf(&foo{}): newFoo,
 			},
-			instances: map[string]interface{}{},
+			instances: map[reflect.Type]interface{}{},
 		}
 
 		var f *foo
 		assert.NoError(c.Inject(&f))
 		assert.NotNil(f)
-		_, ok := c.instances["*di.foo"]
+		_, ok := c.instances[reflect.TypeOf(&foo{})]
 		assert.True(ok)
 	})
 
@@ -107,19 +108,19 @@ func TestContainer_Inject(t *testing.T) {
 		assert := assert.New(t)
 
 		c := Container{
-			providers: map[string]interface{}{
-				"*di.foo": newFoo,
-				"*di.bar": newBar,
+			providers: map[reflect.Type]interface{}{
+				reflect.TypeOf(&foo{}): newFoo,
+				reflect.TypeOf(&bar{}): newBar,
 			},
-			instances: map[string]interface{}{},
+			instances: map[reflect.Type]interface{}{},
 		}
 
 		var b *bar
 		assert.NoError(c.Inject(&b))
 		assert.NotNil(b)
-		_, ok := c.instances["*di.foo"]
+		_, ok := c.instances[reflect.TypeOf(&foo{})]
 		assert.True(ok)
-		_, ok = c.instances["*di.bar"]
+		_, ok = c.instances[reflect.TypeOf(&bar{})]
 		assert.True(ok)
 	})
 
@@ -127,10 +128,10 @@ func TestContainer_Inject(t *testing.T) {
 		assert := assert.New(t)
 
 		c := Container{
-			providers: map[string]interface{}{
-				"*di.qux": newQux,
+			providers: map[reflect.Type]interface{}{
+				reflect.TypeOf(&qux{}): newQux,
 			},
-			instances: map[string]interface{}{},
+			instances: map[reflect.Type]interface{}{},
 		}
 
 		var q *qux
@@ -146,9 +147,9 @@ func TestContainer_Close(t *testing.T) {
 		b := bar{}
 
 		c := Container{
-			instances: map[string]interface{}{
-				"*di.foo": &f,
-				"*di.bar": &b,
+			instances: map[reflect.Type]interface{}{
+				reflect.TypeOf(&foo{}): &f,
+				reflect.TypeOf(&bar{}): &b,
 			},
 		}
 
@@ -165,9 +166,9 @@ func TestContainer_Close(t *testing.T) {
 		b := bar{}
 
 		c := Container{
-			instances: map[string]interface{}{
-				"*di.foo": &f,
-				"*di.bar": &b,
+			instances: map[reflect.Type]interface{}{
+				reflect.TypeOf(&foo{}): &f,
+				reflect.TypeOf(&bar{}): &b,
 			},
 		}
 
@@ -188,9 +189,9 @@ func TestContainer_Close(t *testing.T) {
 		}
 
 		c := Container{
-			instances: map[string]interface{}{
-				"*di.foo": &f,
-				"*di.qux": &q,
+			instances: map[reflect.Type]interface{}{
+				reflect.TypeOf(&foo{}): &f,
+				reflect.TypeOf(&qux{}): &q,
 			},
 		}
 
