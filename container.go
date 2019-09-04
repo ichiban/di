@@ -10,13 +10,13 @@ import (
 
 type Container struct {
 	providers map[reflect.Type]interface{}
-	instances map[reflect.Type]interface{}
+	instances map[reflect.Type]reflect.Value
 }
 
 func New(providers ...interface{}) (*Container, error) {
 	c := Container{
 		providers: make(map[reflect.Type]interface{}, len(providers)),
-		instances: make(map[reflect.Type]interface{}, len(providers)),
+		instances: make(map[reflect.Type]reflect.Value, len(providers)),
 	}
 
 	for _, p := range providers {
@@ -28,12 +28,20 @@ func New(providers ...interface{}) (*Container, error) {
 	return &c, nil
 }
 
+func MustNew(providers ...interface{}) *Container {
+	c, err := New(providers...)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
 var errorInterface = reflect.TypeOf((*error)(nil)).Elem()
 
-func (c *Container) provide(f interface{}) error {
-	t := reflect.TypeOf(f)
+func (c *Container) provide(provider interface{}) error {
+	t := reflect.TypeOf(provider)
 	if t.Kind() != reflect.Func {
-		return fmt.Errorf("not a function: %s", t)
+		return fmt.Errorf("not a provider function: %s", t)
 	}
 
 	n := t.NumOut()
@@ -49,39 +57,45 @@ func (c *Container) provide(f interface{}) error {
 	}
 
 	o := t.Out(0)
-	c.providers[o] = f
+	if _, ok := c.providers[o]; ok {
+		return fmt.Errorf("duplicated provider: %s", o)
+	}
+	c.providers[o] = provider
 
 	return nil
 }
 
-func (c *Container) Inject(o interface{}) error {
-	v := reflect.ValueOf(o)
-	t := v.Type()
-	if t.Kind() != reflect.Ptr {
-		return fmt.Errorf("not a pointer: %s", t)
+func (c *Container) Consume(consumer interface{}) error {
+	f := reflect.ValueOf(consumer)
+
+	t := f.Type()
+	if t.Kind() != reflect.Func {
+		return xerrors.Errorf("not a consumer function: %s", t)
+	}
+	if t.NumOut() != 0 {
+		return xerrors.Errorf("not a consumer function with 0 results: %s", t)
 	}
 
-	return c.inject(v.Elem())
-}
-
-func (c *Container) inject(v reflect.Value) error {
-	t := v.Type()
-
-	o, err := c.instance(t)
-	if err != nil {
-		return err
+	args := make([]reflect.Value, t.NumIn())
+	for i := 0; i < t.NumIn(); i++ {
+		a, err := c.instance(t.In(i))
+		if err != nil {
+			return err
+		}
+		args[i] = a
 	}
 
-	if !v.CanSet() {
-		return fmt.Errorf("cannot set: %s", t)
-	}
-
-	v.Set(reflect.ValueOf(o))
-
+	f.Call(args)
 	return nil
 }
 
-func (c *Container) instance(ty reflect.Type) (interface{}, error) {
+func (c *Container) MustConsume(consumer interface{}) {
+	if err := c.Consume(consumer); err != nil {
+		panic(err)
+	}
+}
+
+func (c *Container) instance(ty reflect.Type) (reflect.Value, error) {
 	i, ok := c.instances[ty]
 	if ok {
 		return i, nil
@@ -89,7 +103,7 @@ func (c *Container) instance(ty reflect.Type) (interface{}, error) {
 
 	p, ok := c.providers[ty]
 	if !ok {
-		return nil, fmt.Errorf("not provided: %s", ty)
+		return reflect.Value{}, fmt.Errorf("not provided: %s", ty)
 	}
 
 	f := reflect.ValueOf(p)
@@ -99,25 +113,21 @@ func (c *Container) instance(ty reflect.Type) (interface{}, error) {
 	for i := 0; i < t.NumIn(); i++ {
 		a, err := c.instance(t.In(i))
 		if err != nil {
-			return nil, err
+			return reflect.Value{}, err
 		}
-		args[i] = reflect.ValueOf(a)
+		args[i] = a
 	}
 
-	var o interface{}
+	var o reflect.Value
 	var e error
 
 	ret := f.Call(args)
-	switch len(ret) {
-	case 1:
-		o = ret[0].Interface()
-	case 2:
-		o = ret[0].Interface()
+	o = ret[0]
+
+	if len(ret) == 2 {
 		if i := ret[1].Interface(); i != nil {
 			e = i.(error)
 		}
-	default:
-		e = fmt.Errorf("invalid provider: %s", ty)
 	}
 
 	c.instances[ty] = o
@@ -128,7 +138,7 @@ func (c *Container) instance(ty reflect.Type) (interface{}, error) {
 func (c *Container) Close() error {
 	var e multiError
 	for _, i := range c.instances {
-		c, ok := i.(io.Closer)
+		c, ok := i.Interface().(io.Closer)
 		if !ok {
 			continue
 		}

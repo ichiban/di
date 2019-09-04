@@ -75,7 +75,7 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestContainer_Inject(t *testing.T) {
+func TestContainer_Consume(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		assert := assert.New(t)
 
@@ -83,8 +83,8 @@ func TestContainer_Inject(t *testing.T) {
 			providers: map[reflect.Type]interface{}{},
 		}
 
-		var f *foo
-		assert.Error(c.Inject(&f))
+		assert.Error(c.Consume(func(f *foo) {
+		}))
 	})
 
 	t.Run("single", func(t *testing.T) {
@@ -94,12 +94,13 @@ func TestContainer_Inject(t *testing.T) {
 			providers: map[reflect.Type]interface{}{
 				reflect.TypeOf(&foo{}): newFoo,
 			},
-			instances: map[reflect.Type]interface{}{},
+			instances: map[reflect.Type]reflect.Value{},
 		}
 
-		var f *foo
-		assert.NoError(c.Inject(&f))
-		assert.NotNil(f)
+		assert.NoError(c.Consume(func(f *foo) {
+			assert.NotNil(f)
+		}))
+
 		_, ok := c.instances[reflect.TypeOf(&foo{})]
 		assert.True(ok)
 	})
@@ -112,12 +113,37 @@ func TestContainer_Inject(t *testing.T) {
 				reflect.TypeOf(&foo{}): newFoo,
 				reflect.TypeOf(&bar{}): newBar,
 			},
-			instances: map[reflect.Type]interface{}{},
+			instances: map[reflect.Type]reflect.Value{},
 		}
 
-		var b *bar
-		assert.NoError(c.Inject(&b))
-		assert.NotNil(b)
+		assert.NoError(c.Consume(func(b *bar) {
+			assert.NotNil(b)
+			assert.NotNil(b.Foo)
+		}))
+
+		_, ok := c.instances[reflect.TypeOf(&foo{})]
+		assert.True(ok)
+		_, ok = c.instances[reflect.TypeOf(&bar{})]
+		assert.True(ok)
+	})
+
+	t.Run("multiple", func(t *testing.T) {
+		assert := assert.New(t)
+
+		c := Container{
+			providers: map[reflect.Type]interface{}{
+				reflect.TypeOf(&foo{}): newFoo,
+				reflect.TypeOf(&bar{}): newBar,
+			},
+			instances: map[reflect.Type]reflect.Value{},
+		}
+
+		assert.NoError(c.Consume(func(f *foo, b *bar) {
+			assert.NotNil(f)
+			assert.NotNil(b)
+			assert.NotNil(b.Foo)
+		}))
+
 		_, ok := c.instances[reflect.TypeOf(&foo{})]
 		assert.True(ok)
 		_, ok = c.instances[reflect.TypeOf(&bar{})]
@@ -131,11 +157,11 @@ func TestContainer_Inject(t *testing.T) {
 			providers: map[reflect.Type]interface{}{
 				reflect.TypeOf(&qux{}): newQux,
 			},
-			instances: map[reflect.Type]interface{}{},
+			instances: map[reflect.Type]reflect.Value{},
 		}
 
-		var q *qux
-		assert.Error(c.Inject(&q))
+		assert.Error(c.Consume(func(q *qux) {
+		}))
 	})
 }
 
@@ -147,9 +173,9 @@ func TestContainer_Close(t *testing.T) {
 		b := bar{}
 
 		c := Container{
-			instances: map[reflect.Type]interface{}{
-				reflect.TypeOf(&foo{}): &f,
-				reflect.TypeOf(&bar{}): &b,
+			instances: map[reflect.Type]reflect.Value{
+				reflect.TypeOf(&foo{}): reflect.ValueOf(&f),
+				reflect.TypeOf(&bar{}): reflect.ValueOf(&b),
 			},
 		}
 
@@ -166,9 +192,9 @@ func TestContainer_Close(t *testing.T) {
 		b := bar{}
 
 		c := Container{
-			instances: map[reflect.Type]interface{}{
-				reflect.TypeOf(&foo{}): &f,
-				reflect.TypeOf(&bar{}): &b,
+			instances: map[reflect.Type]reflect.Value{
+				reflect.TypeOf(&foo{}): reflect.ValueOf(&f),
+				reflect.TypeOf(&bar{}): reflect.ValueOf(&b),
 			},
 		}
 
@@ -189,9 +215,9 @@ func TestContainer_Close(t *testing.T) {
 		}
 
 		c := Container{
-			instances: map[reflect.Type]interface{}{
-				reflect.TypeOf(&foo{}): &f,
-				reflect.TypeOf(&qux{}): &q,
+			instances: map[reflect.Type]reflect.Value{
+				reflect.TypeOf(&foo{}): reflect.ValueOf(&f),
+				reflect.TypeOf(&qux{}): reflect.ValueOf(&q),
 			},
 		}
 
