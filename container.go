@@ -155,6 +155,12 @@ func (c *Container) Close() error {
 	return nil
 }
 
+func (c *Container) MustClose() {
+	if err := c.Close(); err != nil {
+		panic(err)
+	}
+}
+
 type multiError []error
 
 func (m multiError) Error() string {
